@@ -1,0 +1,25 @@
+{
+  "name": "discord-message-logger",
+  "version": "1.0.0",
+  "description": "A Discord bot that logs messages to a database",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "nodemon index.js"
+  },
+  "keywords": [
+    "discord",
+    "logging",
+    "bot"
+  ],
+  "author": "cripboy72262-cmd",
+  "license": "MIT",
+  "dependencies": {
+    "discord.js": "^14.14.0",
+    "dotenv": "^16.3.1",
+    "sqlite3": "^5.1.6"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.1"
+  }
+}
