@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
+const { Client } = require('discord.js-selfbot-v13');
 const fs = require('fs');
 const path = require('path');
 require('dotenv').config();
@@ -6,22 +6,15 @@ require('dotenv').config();
 const config = require('./config');
 const logger = require('./logger');
 
-// Initialize Discord client
-const client = new Client({
-  intents: [
-    GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.DirectMessages,
-  ]
-});
+// Initialize Discord client with user token
+const client = new Client();
 
-// When bot is ready
+// When user account is ready
 client.once('ready', () => {
-  console.log(`✅ Bot logged in as ${client.user.tag}`);
-  console.log(`📍 Bot is in ${client.guilds.cache.size} guild(s)`);
+  console.log(`✅ User account logged in as ${client.user.username}#${client.user.discriminator}`);
+  console.log(`📍 Monitoring ${client.guilds.cache.size} guild(s)`);
   
-  // List all guilds the bot is in
+  // List all guilds the user is in
   client.guilds.cache.forEach((guild) => {
     console.log(`  - ${guild.name} (${guild.id})`);
   });
@@ -29,10 +22,10 @@ client.once('ready', () => {
   logger.initializeDatabase();
 });
 
-// Log messages from ALL guilds
+// Log messages from ALL guilds the user is in
 client.on('messageCreate', async (message) => {
-  // Ignore bot messages
-  if (message.author.bot) return;
+  // Don't log our own messages, but log everything else
+  if (message.author.id === client.user.id) return;
 
   try {
     // Log message to database
@@ -57,21 +50,21 @@ client.on('messageCreate', async (message) => {
   }
 });
 
-// Track when bot joins a new guild
+// Track when user joins a new guild
 client.on('guildCreate', (guild) => {
-  console.log(`➕ Bot joined guild: ${guild.name} (${guild.id}) with ${guild.memberCount} members`);
+  console.log(`➕ User joined guild: ${guild.name} (${guild.id}) with ${guild.memberCount} members`);
 });
 
-// Track when bot leaves a guild
+// Track when user leaves a guild
 client.on('guildDelete', (guild) => {
-  console.log(`➖ Bot left guild: ${guild.name} (${guild.id})`);
+  console.log(`➖ User left guild: ${guild.name} (${guild.id})`);
 });
 
 // Handle errors
 client.on('error', error => console.error('Discord client error:', error));
 process.on('unhandledRejection', error => console.error('Unhandled rejection:', error));
 
-// Login to Discord
-client.login(config.discordToken);
+// Login with user token
+client.login(config.userToken);
 
 module.exports = client;

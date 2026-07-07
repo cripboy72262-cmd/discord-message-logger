@@ -1,16 +1,19 @@
-# Discord Message Logger
+# Discord Message Logger (User Token)
 
-A Discord bot that automatically logs all messages from **all guilds** the bot is in to a local SQLite database.
+⚠️ **DISCLAIMER**: This uses a Discord user account token for logging. Using user tokens for automation violates Discord's Terms of Service and may result in account termination. Use at your own risk.
+
+A Discord user account message logger that captures all messages from servers the user account is in and stores them in a local SQLite database.
 
 ## Features
 
-- 📝 Logs all messages from all Discord servers (guilds) the bot is in
+- 📝 Logs all messages from all Discord servers the user account is in
 - 📊 Stores messages in a local SQLite database with full metadata
 - 👤 Tracks author information, timestamps, and guild details
 - 🔗 Captures attachments and links
-- 🛡️ Ignores bot messages automatically
-- 📍 Shows which guilds the bot is monitoring
-- ➕ Auto-detects when bot joins/leaves guilds
+- 🛡️ Ignores own messages automatically
+- 📍 Shows which guilds the account is monitoring
+- ➕ Auto-detects when account joins/leaves guilds
+- 🔐 Private and local - no external data transmission
 
 ## Installation
 
@@ -18,7 +21,7 @@ A Discord bot that automatically logs all messages from **all guilds** the bot i
 
 - Node.js 16.11.0 or higher
 - npm or yarn
-- Discord bot token
+- Discord user account (with token)
 
 ### Setup Steps
 
@@ -37,34 +40,30 @@ A Discord bot that automatically logs all messages from **all guilds** the bot i
    cp .env.example .env
    ```
 
-4. **Configure your bot:**
-   - Get your Discord bot token from [Discord Developer Portal](https://discord.com/developers/applications)
+4. **Get your user token:**
+   - Open Discord in a browser
+   - Open Developer Tools (F12)
+   - Go to Application → Local Storage → https://discord.com
+   - Find `token` key and copy the value (it's in quotes, remove them)
    - Add it to your `.env` file:
      ```
-     DISCORD_TOKEN=your_token_here
+     USER_TOKEN=your_token_here
      DB_PATH=./messages.db
      ```
 
-5. **Start the bot:**
+5. **Start the logger:**
    ```bash
    npm start
    ```
 
 ## Usage
 
-### Starting the Bot
+### Starting the Logger
 
 ```bash
 npm start          # Production mode
 npm run dev        # Development mode with auto-reload (requires nodemon)
 ```
-
-### Bot Permissions
-
-Make sure your bot has these permissions in each guild:
-- View Channels
-- Read Messages/View Channels
-- Read Message History
 
 ### Database
 
@@ -79,18 +78,18 @@ Messages are stored in `messages.db` (SQLite). The database includes:
 
 ## Multi-Guild Support
 
-This bot will:
-- ✅ Automatically log messages from ALL guilds it's in
+This logger will:
+- ✅ Automatically log messages from ALL servers your account is in
 - ✅ Track guild names alongside message data
-- ✅ Notify console when joining/leaving guilds
+- ✅ Notify console when account joins/leaves guilds
 - ✅ Display all monitored guilds on startup
-- ✅ No configuration needed - just add the bot to guilds!
+- ✅ Store all data locally (no external transmission)
 
 ## File Structure
 
 ```
 .
-├── index.js          # Main bot entry point (handles all guilds)
+├── index.js          # Main logger entry point (user token)
 ├── config.js         # Configuration management
 ├── logger.js         # Database logging logic
 ├── package.json      # Project dependencies
@@ -105,11 +104,9 @@ This bot will:
 Edit your `.env` file:
 
 ```env
-DISCORD_TOKEN=your_bot_token_here
+USER_TOKEN=your_user_token_here
 DB_PATH=./messages.db
 ```
-
-**Note:** No `GUILD_ID` required! The bot logs all guilds automatically.
 
 ## Database Schema
 
@@ -134,11 +131,13 @@ The `messages` table contains:
 ## Console Output Example
 
 ```
-✅ Bot logged in as YourBot#1234
-📍 Bot is in 3 guild(s)
+✅ User account logged in as YourUsername#1234
+📍 Monitoring 5 guild(s)
   - My Server (123456789)
   - Test Guild (987654321)
   - Community Hub (555555555)
+  - Work Server (111111111)
+  - Gaming Group (222222222)
 ✅ Connected to SQLite database
 📊 Messages table ready - logging ALL guilds
 📝 Logged message from JohnDoe in My Server/#general
@@ -147,21 +146,37 @@ The `messages` table contains:
 
 ## Troubleshooting
 
-### Bot doesn't log messages
-- Verify your token in `.env` is correct
-- Make sure the bot has "Read Messages" permission in the guilds
-- Check that the bot has "Read Message History" enabled
-- Restart the bot after changing permissions
+### Logger doesn't log messages
+- Verify your user token in `.env` is correct
+- Make sure the account can access the channels in each server
+- Restart the logger after making changes
+- Check that your account hasn't been rate-limited
 
 ### Database errors
 - Ensure `sqlite3` is properly installed
 - Delete `messages.db` and restart to reset the database
 - Check disk space availability
 
-### Guild not appearing
-- The bot only logs guilds it has joined
-- Check if the bot actually has access to channels in that guild
-- Use the console output to verify which guilds are loaded
+### Token invalid
+- Tokens can expire - regenerate by getting a new one from Discord
+- Make sure there are no extra spaces or quotes in the token
+
+### Account getting flagged
+- Discord may detect unusual activity
+- Run this on a personal, disposable account if concerned
+- Don't use it in too many servers simultaneously
+
+## Security Notes
+
+⚠️ **Important**:
+- Keep your user token **SECRET** - never share it
+- Don't commit `.env` to git
+- This tool stores messages locally only
+- Your account may be at risk if Discord detects the token usage
+
+## Legal Notice
+
+This project is for educational purposes. Users are responsible for complying with Discord's Terms of Service. The author assumes no liability for account suspension or other consequences.
 
 ## License
 
