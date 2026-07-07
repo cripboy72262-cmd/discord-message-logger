@@ -1,0 +1,6 @@
+# Files to exclude from Docker builds
+node_modules/
+.env
+*.db
+logs/
+.DS_Store
