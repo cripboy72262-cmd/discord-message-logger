@@ -9,22 +9,26 @@ const logger = {
   initializeDatabase() {
     if (dbInitialized) return;
     
-    const dbDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || './data';
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
-    
-    const dbPath = path.join(dbDir, 'messages.db');
-    
-    db = new sqlite3.Database(dbPath, (err) => {
-      if (err) {
-        console.error('Error opening database:', err.message);
-        return;
+    try {
+      const dbDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || './data';
+      if (!fs.existsSync(dbDir)) {
+        fs.mkdirSync(dbDir, { recursive: true });
       }
-      console.log('✅ Connected to SQLite database');
-      this.createTables();
-      dbInitialized = true;
-    });
+      
+      const dbPath = path.join(dbDir, 'messages.db');
+      
+      db = new sqlite3.Database(dbPath, (err) => {
+        if (err) {
+          console.error('Database error:', err.message);
+          return;
+        }
+        console.log('✅ Database connected');
+        this.createTables();
+        dbInitialized = true;
+      });
+    } catch (error) {
+      console.error('Database initialization error:', error.message);
+    }
   },
 
   createTables() {
@@ -48,9 +52,9 @@ const logger = {
       createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
     )`, (err) => {
       if (err) {
-        console.error('Error creating table:', err.message);
+        console.error('Table creation error:', err.message);
       } else {
-        console.log('📊 Messages table ready');
+        console.log('📊 Table ready');
       }
     });
   },
@@ -58,17 +62,16 @@ const logger = {
   logMessage(messageData) {
     if (!db) return;
 
-    const { messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM, timestamp, attachments } = messageData;
+    try {
+      const { messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM, timestamp, attachments } = messageData;
 
-    db.run(
-      `INSERT INTO messages (messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM, timestamp, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM ? 1 : 0, timestamp, attachments],
-      function(err) {
-        if (err && !err.message.includes('UNIQUE')) {
-          console.error('Error inserting:', err.message);
-        }
-      }
-    );
+      db.run(
+        `INSERT OR IGNORE INTO messages (messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM, timestamp, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM ? 1 : 0, timestamp, attachments]
+      );
+    } catch (error) {
+      console.error('Log message error:', error.message);
+    }
   },
 
   getRecentMessages(limit, callback) {
@@ -76,9 +79,13 @@ const logger = {
       callback([]);
       return;
     }
-    db.all('SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?', [limit], (err, rows) => {
-      callback(rows || []);
-    });
+    try {
+      db.all('SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?', [limit], (err, rows) => {
+        callback(rows || []);
+      });
+    } catch (e) {
+      callback([]);
+    }
   },
 
   searchMessages(query, callback) {
@@ -86,10 +93,14 @@ const logger = {
       callback([]);
       return;
     }
-    const searchQuery = `%${query}%`;
-    db.all('SELECT * FROM messages WHERE authorName LIKE ? OR authorDisplayName LIKE ? OR authorId LIKE ? ORDER BY timestamp DESC LIMIT 500', [searchQuery, searchQuery, searchQuery], (err, rows) => {
-      callback(rows || []);
-    });
+    try {
+      const q = `%${query}%`;
+      db.all('SELECT * FROM messages WHERE authorName LIKE ? OR authorId LIKE ? ORDER BY timestamp DESC LIMIT 500', [q, q], (err, rows) => {
+        callback(rows || []);
+      });
+    } catch (e) {
+      callback([]);
+    }
   },
 
   searchByKeyword(keyword, callback) {
@@ -97,10 +108,14 @@ const logger = {
       callback([]);
       return;
     }
-    const searchKeyword = `%${keyword}%`;
-    db.all('SELECT * FROM messages WHERE content LIKE ? ORDER BY timestamp DESC LIMIT 1000', [searchKeyword], (err, rows) => {
-      callback(rows || []);
-    });
+    try {
+      const k = `%${keyword}%`;
+      db.all('SELECT * FROM messages WHERE content LIKE ? ORDER BY timestamp DESC LIMIT 1000', [k], (err, rows) => {
+        callback(rows || []);
+      });
+    } catch (e) {
+      callback([]);
+    }
   },
 
   getMessagesByUser(userId, callback) {
@@ -108,9 +123,13 @@ const logger = {
       callback([]);
       return;
     }
-    db.all('SELECT * FROM messages WHERE authorId = ? ORDER BY timestamp DESC LIMIT 1000', [userId], (err, rows) => {
-      callback(rows || []);
-    });
+    try {
+      db.all('SELECT * FROM messages WHERE authorId = ? ORDER BY timestamp DESC LIMIT 1000', [userId], (err, rows) => {
+        callback(rows || []);
+      });
+    } catch (e) {
+      callback([]);
+    }
   },
 
   getMessagesByUserAndChannel(userId, channelId, callback) {
@@ -118,9 +137,13 @@ const logger = {
       callback([]);
       return;
     }
-    db.all('SELECT * FROM messages WHERE authorId = ? AND channelId = ? ORDER BY timestamp DESC LIMIT 1000', [userId, channelId], (err, rows) => {
-      callback(rows || []);
-    });
+    try {
+      db.all('SELECT * FROM messages WHERE authorId = ? AND channelId = ? ORDER BY timestamp DESC LIMIT 1000', [userId, channelId], (err, rows) => {
+        callback(rows || []);
+      });
+    } catch (e) {
+      callback([]);
+    }
   },
 
   getMessagesByGuild(guildId, callback) {
@@ -128,32 +151,42 @@ const logger = {
       callback([]);
       return;
     }
-    db.all('SELECT * FROM messages WHERE guildId = ? ORDER BY timestamp DESC LIMIT 1000', [guildId], (err, rows) => {
-      callback(rows || []);
-    });
+    try {
+      db.all('SELECT * FROM messages WHERE guildId = ? ORDER BY timestamp DESC LIMIT 1000', [guildId], (err, rows) => {
+        callback(rows || []);
+      });
+    } catch (e) {
+      callback([]);
+    }
   },
 
   getStats(callback) {
     if (!db) {
-      callback({});
+      callback({ totalMessages: 0, uniqueUsers: 0, totalGuilds: 0 });
       return;
     }
-    const stats = {};
-    db.get('SELECT COUNT(*) as total FROM messages', (err, row) => {
-      stats.totalMessages = row ? row.total : 0;
-      db.get('SELECT COUNT(DISTINCT authorId) as total FROM messages', (err, row) => {
-        stats.uniqueUsers = row ? row.total : 0;
-        db.get('SELECT COUNT(DISTINCT guildId) as total FROM messages', (err, row) => {
-          stats.totalGuilds = row ? row.total : 0;
-          callback(stats);
+    try {
+      db.get('SELECT COUNT(*) as total FROM messages', (err, row) => {
+        const stats = { totalMessages: row ? row.total : 0 };
+        db.get('SELECT COUNT(DISTINCT authorId) as total FROM messages', (err, row) => {
+          stats.uniqueUsers = row ? row.total : 0;
+          db.get('SELECT COUNT(DISTINCT guildId) as total FROM messages', (err, row) => {
+            stats.totalGuilds = row ? row.total : 0;
+            callback(stats);
+          });
         });
       });
-    });
+    } catch (e) {
+      callback({ totalMessages: 0, uniqueUsers: 0, totalGuilds: 0 });
+    }
   },
 
   closeDatabase() {
     if (db) {
-      db.close();
+      try {
+        db.close();
+        dbInitialized = false;
+      } catch (e) {}
     }
   }
 };

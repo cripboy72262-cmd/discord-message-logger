@@ -1,12 +1,14 @@
+let sessionId = null;
 let loggedIn = false;
 
 window.addEventListener('load', () => checkStatus());
 
 async function checkStatus() {
     try {
-        const res = await fetch('/api/status');
+        const headers = sessionId ? { 'x-session-id': sessionId } : {};
+        const res = await fetch('/api/status', { headers });
         const data = await res.json();
-        if (data.loggedIn) {
+        if (data.loggedIn && sessionId) {
             loggedIn = true;
             showDash();
             loadStats();
@@ -15,6 +17,7 @@ async function checkStatus() {
             showLogin();
         }
     } catch (e) {
+        console.error('Status check error:', e);
         showLogin();
     }
 }
@@ -33,9 +36,11 @@ async function login() {
             body: JSON.stringify({ token })
         });
         const data = await res.json();
-        if (data.success) {
+        if (data.success && data.sessionId) {
+            sessionId = data.sessionId;
             loggedIn = true;
             error.textContent = '';
+            localStorage.setItem('sessionId', sessionId);
             showDash();
             loadStats();
         } else {
@@ -47,7 +52,10 @@ async function login() {
 }
 
 async function logout() {
-    await fetch('/api/logout', { method: 'POST' });
+    const headers = sessionId ? { 'x-session-id': sessionId } : {};
+    await fetch('/api/logout', { method: 'POST', headers });
+    sessionId = null;
+    localStorage.removeItem('sessionId');
     loggedIn = false;
     showLogin();
 }
@@ -70,10 +78,15 @@ function tab(name) {
     if (name === 'guilds') loadGuilds();
 }
 
+async function api(endpoint, method = 'GET') {
+    const headers = { 'x-session-id': sessionId };
+    const res = await fetch(endpoint, { method, headers });
+    return res.json();
+}
+
 async function loadStats() {
     try {
-        const res = await fetch('/api/stats');
-        const data = await res.json();
+        const data = await api('/api/stats');
         if (data.stats) {
             document.getElementById('s1').textContent = data.stats.totalMessages || 0;
             document.getElementById('s2').textContent = data.stats.uniqueUsers || 0;
@@ -84,14 +97,13 @@ async function loadStats() {
 
 async function loadRecent() {
     try {
-        const res = await fetch('/api/messages?limit=20');
-        const data = await res.json();
+        const data = await api('/api/messages?limit=20');
         const container = document.getElementById('recent');
         container.innerHTML = '';
         if (data.messages && data.messages.length > 0) {
             data.messages.forEach(msg => {
                 const date = new Date(msg.timestamp).toLocaleString();
-                container.innerHTML += `<div class="msg"><strong>${msg.authorName}</strong> in ${msg.channelName} (${msg.guildName})<br><small>${date}</small><p>${msg.content.substring(0, 100)}</p></div>`;
+                container.innerHTML += `<div class="msg"><strong>${msg.authorName}</strong> in ${msg.channelName} (${msg.guildName})<br><small>${date}</small><p>${(msg.content || '').substring(0, 100)}</p></div>`;
             });
         }
     } catch (e) { console.error(e); }
@@ -101,13 +113,12 @@ async function doSearch() {
     const query = document.getElementById('search-input').value.trim();
     if (!query) return;
     try {
-        const res = await fetch('/api/search?q=' + encodeURIComponent(query));
-        const data = await res.json();
+        const data = await api('/api/search?q=' + encodeURIComponent(query));
         const container = document.getElementById('search-results');
         container.innerHTML = `<p>Found ${data.messages.length} results</p>`;
         data.messages.slice(0, 20).forEach(msg => {
             const date = new Date(msg.timestamp).toLocaleString();
-            container.innerHTML += `<div class="msg"><strong>${msg.authorName}</strong> (${msg.authorId})<br><small>${date}</small><p>${msg.content.substring(0, 100)}</p></div>`;
+            container.innerHTML += `<div class="msg"><strong>${msg.authorName}</strong> (${msg.authorId})<br><small>${date}</small><p>${(msg.content || '').substring(0, 100)}</p></div>`;
         });
     } catch (e) { alert('Error: ' + e.message); }
 }
@@ -116,21 +127,19 @@ async function doKeyword() {
     const keyword = document.getElementById('keyword-input').value.trim();
     if (!keyword) return;
     try {
-        const res = await fetch('/api/keyword?k=' + encodeURIComponent(keyword));
-        const data = await res.json();
+        const data = await api('/api/keyword?k=' + encodeURIComponent(keyword));
         const container = document.getElementById('keyword-results');
         container.innerHTML = `<p>Found ${data.messages.length} messages</p>`;
         data.messages.slice(0, 20).forEach(msg => {
             const date = new Date(msg.timestamp).toLocaleString();
-            container.innerHTML += `<div class="msg"><strong>${msg.authorName}</strong><br><small>${date}</small><p>${msg.content.substring(0, 100)}</p></div>`;
+            container.innerHTML += `<div class="msg"><strong>${msg.authorName}</strong><br><small>${date}</small><p>${(msg.content || '').substring(0, 100)}</p></div>`;
         });
     } catch (e) { alert('Error: ' + e.message); }
 }
 
 async function loadGuilds() {
     try {
-        const res = await fetch('/api/guilds');
-        const data = await res.json();
+        const data = await api('/api/guilds');
         const container = document.getElementById('guilds-list');
         container.innerHTML = '';
         if (data.guilds && data.guilds.length > 0) {
@@ -140,5 +149,13 @@ async function loadGuilds() {
         }
     } catch (e) { console.error(e); }
 }
+
+window.addEventListener('load', () => {
+    const saved = localStorage.getItem('sessionId');
+    if (saved) {
+        sessionId = saved;
+        checkStatus();
+    }
+});
 
 setInterval(() => { if (loggedIn) loadStats(); }, 30000);

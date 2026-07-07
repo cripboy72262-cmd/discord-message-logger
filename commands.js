@@ -1,16 +1,16 @@
 const commands = {
   async handleCommand(message, client, logger) {
-    const args = message.content.slice(1).split(/ +/);
-    const command = args.shift().toLowerCase();
-
     try {
+      const args = message.content.slice(1).split(/ +/);
+      const command = args.shift().toLowerCase();
+
       switch (command) {
         case 'help':
-          await message.reply('📋 **Commands:** ?help, ?stats, ?user <id> <ch>, ?search <keyword>, ?guilds, ?ping');
+          await message.reply('**Commands:** ?help, ?stats, ?user <id> <ch>, ?search <keyword>, ?guilds, ?ping');
           break;
         case 'stats':
           logger.getStats((stats) => {
-            message.reply(`📊 **Stats:** ${stats.totalMessages || 0} messages, ${stats.uniqueUsers || 0} users, ${stats.totalGuilds || 0} guilds`);
+            message.reply(`📊 **Stats:** ${stats.totalMessages || 0} messages, ${stats.uniqueUsers || 0} users`);
           });
           break;
         case 'user':
@@ -28,7 +28,7 @@ const commands = {
             return;
           }
           logger.searchByKeyword(args.join(' '), (msgs) => {
-            message.reply(`Found ${msgs.length} messages with keyword`);
+            message.reply(`Found ${msgs.length} messages`);
           });
           break;
         case 'guilds':
@@ -40,8 +40,6 @@ const commands = {
           const latency = sent.timestamp - message.timestamp;
           await sent.edit(`🏓 Pong! ${latency}ms`);
           break;
-        default:
-          await message.reply('❓ Unknown command');
       }
     } catch (error) {
       console.error('Command error:', error);

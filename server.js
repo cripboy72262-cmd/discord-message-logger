@@ -1,7 +1,7 @@
 const express = require('express');
-const session = require('express-session');
 const bodyParser = require('body-parser');
 const path = require('path');
+const fs = require('fs');
 require('dotenv').config();
 
 const { Client } = require('discord.js-selfbot-v13');
@@ -9,33 +9,50 @@ const logger = require('./logger');
 const commands = require('./commands');
 
 const app = express();
-const client = new Client();
+const client = new Client({
+  checkUpdate: false,
+  intents: 32767
+});
+
 const PORT = process.env.PORT || 3000;
 const DISCORD_TOKEN = process.env.USER_TOKEN || '';
 
 // MIDDLEWARE
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(session({
-  secret: process.env.SESSION_SECRET || 'discord-logger-secret',
-  resave: false,
-  saveUninitialized: true,
-  cookie: { secure: false, maxAge: 24 * 60 * 60 * 1000 }
-}));
+
+// Simple in-memory session store for Railway
+const sessions = {};
+
+app.use((req, res, next) => {
+  const sessionId = req.headers['x-session-id'] || req.query.sessionId;
+  if (sessionId) {
+    req.session = sessions[sessionId] || {};
+    req.sessionId = sessionId;
+  }
+  next();
+});
 
 // DISCORD BOT
+let botReady = false;
+
 client.once('ready', () => {
+  botReady = true;
   console.log(`\n${'='.repeat(60)}`);
-  console.log(`✅ Discord user logged in as ${client.user.username}#${client.user.discriminator}`);
+  console.log(`✅ Discord user logged in as ${client.user.username}`);
   console.log(`📊 Monitoring ${client.guilds.cache.size} guild(s)`);
-  logger.initializeDatabase();
   console.log(`${'='.repeat(60)}\n`);
+  logger.initializeDatabase();
 });
 
 client.on('messageCreate', async (message) => {
   if (message.author.id === client.user.id) {
     if (message.content.startsWith('?')) {
-      await commands.handleCommand(message, client, logger);
+      try {
+        await commands.handleCommand(message, client, logger);
+      } catch (e) {
+        console.error('Command error:', e.message);
+      }
     }
     return;
   }
@@ -46,8 +63,8 @@ client.on('messageCreate', async (message) => {
       authorId: message.author.id,
       authorName: message.author.username,
       authorDisplayName: message.author.displayName || message.author.username,
-      authorDiscriminator: message.author.discriminator,
-      content: message.content,
+      authorDiscriminator: message.author.discriminator || '0',
+      content: message.content || '',
       channelId: message.channelId,
       channelName: message.channel.name || 'DM',
       guildId: message.guildId,
@@ -57,16 +74,16 @@ client.on('messageCreate', async (message) => {
       attachments: message.attachments.size > 0 ? message.attachments.map(a => a.url).join(', ') : null
     });
   } catch (error) {
-    console.error('Error logging message:', error);
+    console.error('Error logging message:', error.message);
   }
 });
 
 client.on('error', error => console.error('Discord error:', error.message));
-process.on('unhandledRejection', error => console.error('Unhandled rejection:', error));
+process.on('unhandledRejection', error => console.error('Unhandled rejection:', error.message));
 
 // WEB ROUTES
 app.get('/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  res.json({ status: botReady ? 'ready' : 'connecting', timestamp: new Date().toISOString() });
 });
 
 app.post('/api/login', (req, res) => {
@@ -74,22 +91,32 @@ app.post('/api/login', (req, res) => {
   if (!token || token.length < 50) {
     return res.status(400).json({ error: 'Invalid token' });
   }
-  req.session.userToken = token;
-  req.session.loggedIn = true;
-  res.json({ success: true });
+  const sessionId = Math.random().toString(36).substring(7);
+  sessions[sessionId] = { loggedIn: true, userToken: token, createdAt: Date.now() };
+  res.json({ success: true, sessionId });
 });
 
 app.post('/api/logout', (req, res) => {
-  req.session.destroy();
+  const sessionId = req.headers['x-session-id'];
+  if (sessionId && sessions[sessionId]) {
+    delete sessions[sessionId];
+  }
   res.json({ success: true });
 });
 
 app.get('/api/status', (req, res) => {
-  res.json({ loggedIn: req.session.loggedIn || false, user: client.user ? client.user.username : 'Unknown' });
+  const sessionId = req.headers['x-session-id'];
+  const session = sessionId ? sessions[sessionId] : null;
+  res.json({
+    loggedIn: session && session.loggedIn,
+    user: client.user ? client.user.username : 'Unknown',
+    botReady
+  });
 });
 
 const checkLogin = (req, res, next) => {
-  if (!req.session.loggedIn) {
+  const sessionId = req.headers['x-session-id'];
+  if (!sessionId || !sessions[sessionId] || !sessions[sessionId].loggedIn) {
     return res.status(401).json({ error: 'Not authenticated' });
   }
   next();
@@ -140,7 +167,11 @@ app.get('/api/stats', checkLogin, (req, res) => {
 });
 
 app.get('/api/guilds', checkLogin, (req, res) => {
-  const guilds = client.guilds.cache.map(g => ({ id: g.id, name: g.name, memberCount: g.memberCount }));
+  const guilds = client.guilds.cache.map(g => ({
+    id: g.id,
+    name: g.name,
+    memberCount: g.memberCount || 0
+  }));
   res.json({ success: true, guilds });
 });
 
@@ -151,14 +182,25 @@ app.get('/api/guild/:guildId/messages', checkLogin, (req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error('Server error:', err);
+  console.error('Server error:', err.message);
   res.status(500).json({ error: 'Internal server error' });
 });
 
 process.on('SIGINT', () => {
   console.log('\nShutting down...');
   logger.closeDatabase();
-  client.destroy();
+  if (client && client.destroy) {
+    client.destroy();
+  }
+  process.exit(0);
+});
+
+process.on('SIGTERM', () => {
+  console.log('\nShutting down...');
+  logger.closeDatabase();
+  if (client && client.destroy) {
+    client.destroy();
+  }
   process.exit(0);
 });
 
@@ -173,5 +215,8 @@ client.login(DISCORD_TOKEN).catch(error => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Web server started on port ${PORT}`);
+  console.log(`Web server listening on port ${PORT}`);
+  console.log(`Access at http://localhost:${PORT}`);
 });
+
+module.exports = { app, client };
