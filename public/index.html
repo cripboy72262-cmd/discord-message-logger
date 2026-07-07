@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Discord Message Logger</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="login" class="container">
+        <div class="box">
+            <h1>🔐 Discord Message Logger</h1>
+            <input type="password" id="token" placeholder="Discord Token...">
+            <button onclick="login()">Login</button>
+            <p id="error"></p>
+        </div>
+    </div>
+
+    <div id="dashboard" style="display:none">
+        <nav>
+            <h1>📊 Discord Logger</h1>
+            <button onclick="logout()">Logout</button>
+        </nav>
+        <div class="main">
+            <aside>
+                <div class="tab-btn active" onclick="tab('overview')">Overview</div>
+                <div class="tab-btn" onclick="tab('search')">Search Users</div>
+                <div class="tab-btn" onclick="tab('keyword')">Keyword</div>
+                <div class="tab-btn" onclick="tab('guilds')">Guilds</div>
+                <div class="tab-btn" onclick="tab('commands')">Commands</div>
+            </aside>
+            <div class="content">
+                <div id="overview" class="tab" style="display:block">
+                    <h2>Statistics</h2>
+                    <div class="stats">
+                        <div class="stat"><div class="num" id="s1">0</div>Messages</div>
+                        <div class="stat"><div class="num" id="s2">0</div>Users</div>
+                        <div class="stat"><div class="num" id="s3">0</div>Guilds</div>
+                    </div>
+                    <h3>Recent Messages</h3>
+                    <div id="recent"></div>
+                </div>
+                <div id="search" class="tab" style="display:none">
+                    <h2>Search by Username/ID</h2>
+                    <input type="text" id="search-input" placeholder="Username or ID...">
+                    <button onclick="doSearch()">Search</button>
+                    <div id="search-results"></div>
+                </div>
+                <div id="keyword" class="tab" style="display:none">
+                    <h2>Search by Keyword</h2>
+                    <input type="text" id="keyword-input" placeholder="Keyword...">
+                    <button onclick="doKeyword()">Search</button>
+                    <div id="keyword-results"></div>
+                </div>
+                <div id="guilds" class="tab" style="display:none">
+                    <h2>Guilds</h2>
+                    <div id="guilds-list"></div>
+                </div>
+                <div id="commands" class="tab" style="display:none">
+                    <h2>Bot Commands</h2>
+                    <div class="cmd"><code>?help</code> - Show commands</div>
+                    <div class="cmd"><code>?stats</code> - Statistics</div>
+                    <div class="cmd"><code>?user &lt;id&gt; &lt;ch&gt;</code> - User messages in channel</div>
+                    <div class="cmd"><code>?search &lt;keyword&gt;</code> - Search keyword</div>
+                    <div class="cmd"><code>?guilds</code> - Show guilds</div>
+                    <div class="cmd"><code>?ping</code> - Check latency</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>

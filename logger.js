@@ -1,5 +1,4 @@
 const sqlite3 = require('sqlite3').verbose();
-const config = require('./config');
 const path = require('path');
 const fs = require('fs');
 
@@ -10,94 +9,117 @@ const logger = {
   initializeDatabase() {
     if (dbInitialized) return;
     
-    // Ensure directory exists
-    const dbDir = path.dirname(config.dbPath);
+    const dbDir = process.env.RAILWAY_VOLUME_MOUNT_PATH || './data';
     if (!fs.existsSync(dbDir)) {
       fs.mkdirSync(dbDir, { recursive: true });
     }
     
-    db = new sqlite3.Database(config.dbPath, (err) => {
+    const dbPath = path.join(dbDir, 'messages.db');
+    
+    db = new sqlite3.Database(dbPath, (err) => {
       if (err) {
-        console.error('❌ Error opening database:', err.message);
+        console.error('Error opening database:', err.message);
         return;
       }
-      console.log('✅ Connected to SQLite database at ' + config.dbPath);
-      this.createTable();
+      console.log('✅ Connected to SQLite database');
+      this.createTables();
       dbInitialized = true;
     });
   },
 
-  createTable() {
-    if (!db) {
-      console.error('Database not initialized');
-      return;
-    }
+  createTables() {
+    if (!db) return;
 
-    db.run(`
-      CREATE TABLE IF NOT EXISTS messages (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        messageId TEXT UNIQUE,
-        authorId TEXT NOT NULL,
-        authorName TEXT NOT NULL,
-        authorDiscriminator TEXT,
-        content TEXT,
-        channelId TEXT NOT NULL,
-        channelName TEXT,
-        guildId TEXT,
-        guildName TEXT,
-        timestamp INTEGER,
-        attachments TEXT,
-        createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-      )
-    `, (err) => {
+    db.run(`CREATE TABLE IF NOT EXISTS messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      messageId TEXT UNIQUE,
+      authorId TEXT NOT NULL,
+      authorName TEXT NOT NULL,
+      authorDisplayName TEXT,
+      authorDiscriminator TEXT,
+      content TEXT,
+      channelId TEXT NOT NULL,
+      channelName TEXT,
+      guildId TEXT,
+      guildName TEXT,
+      isDM BOOLEAN DEFAULT 0,
+      timestamp INTEGER,
+      attachments TEXT,
+      createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
+    )`, (err) => {
       if (err) {
-        console.error('❌ Error creating table:', err.message);
+        console.error('Error creating table:', err.message);
       } else {
-        console.log('📊 Messages table ready - logging ALL guilds');
-        this.getMessageCount((count) => {
-          console.log(`📈 Total messages in database: ${count}`);
-        });
+        console.log('📊 Messages table ready');
       }
     });
   },
 
   logMessage(messageData) {
-    if (!db) {
-      console.error('❌ Database not initialized');
-      return;
-    }
+    if (!db) return;
 
-    const { messageId, authorId, authorName, authorDiscriminator, content, channelId, channelName, guildId, guildName, timestamp, attachments } = messageData;
+    const { messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM, timestamp, attachments } = messageData;
 
     db.run(
-      `INSERT INTO messages (messageId, authorId, authorName, authorDiscriminator, content, channelId, channelName, guildId, guildName, timestamp, attachments)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [messageId, authorId, authorName, authorDiscriminator, content, channelId, channelName, guildId, guildName, timestamp, attachments],
+      `INSERT INTO messages (messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM, timestamp, attachments) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [messageId, authorId, authorName, authorDisplayName, authorDiscriminator, content, channelId, channelName, guildId, guildName, isDM ? 1 : 0, timestamp, attachments],
       function(err) {
-        if (err) {
-          if (err.message.includes('UNIQUE constraint failed')) {
-            // Message already logged, ignore
-          } else {
-            console.error('❌ Error inserting message:', err.message);
-          }
+        if (err && !err.message.includes('UNIQUE')) {
+          console.error('Error inserting:', err.message);
         }
       }
     );
   },
 
-  getMessageCount(callback) {
+  getRecentMessages(limit, callback) {
     if (!db) {
-      callback(0);
+      callback([]);
       return;
     }
-    
-    db.get('SELECT COUNT(*) as count FROM messages', (err, row) => {
-      if (err) {
-        console.error('❌ Error getting message count:', err.message);
-        callback(0);
-      } else {
-        callback(row ? row.count : 0);
-      }
+    db.all('SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?', [limit], (err, rows) => {
+      callback(rows || []);
+    });
+  },
+
+  searchMessages(query, callback) {
+    if (!db) {
+      callback([]);
+      return;
+    }
+    const searchQuery = `%${query}%`;
+    db.all('SELECT * FROM messages WHERE authorName LIKE ? OR authorDisplayName LIKE ? OR authorId LIKE ? ORDER BY timestamp DESC LIMIT 500', [searchQuery, searchQuery, searchQuery], (err, rows) => {
+      callback(rows || []);
+    });
+  },
+
+  searchByKeyword(keyword, callback) {
+    if (!db) {
+      callback([]);
+      return;
+    }
+    const searchKeyword = `%${keyword}%`;
+    db.all('SELECT * FROM messages WHERE content LIKE ? ORDER BY timestamp DESC LIMIT 1000', [searchKeyword], (err, rows) => {
+      callback(rows || []);
+    });
+  },
+
+  getMessagesByUser(userId, callback) {
+    if (!db) {
+      callback([]);
+      return;
+    }
+    db.all('SELECT * FROM messages WHERE authorId = ? ORDER BY timestamp DESC LIMIT 1000', [userId], (err, rows) => {
+      callback(rows || []);
+    });
+  },
+
+  getMessagesByUserAndChannel(userId, channelId, callback) {
+    if (!db) {
+      callback([]);
+      return;
+    }
+    db.all('SELECT * FROM messages WHERE authorId = ? AND channelId = ? ORDER BY timestamp DESC LIMIT 1000', [userId, channelId], (err, rows) => {
+      callback(rows || []);
     });
   },
 
@@ -106,43 +128,32 @@ const logger = {
       callback([]);
       return;
     }
-    
-    db.all('SELECT * FROM messages WHERE guildId = ? ORDER BY timestamp DESC LIMIT 100', [guildId], (err, rows) => {
-      if (err) {
-        console.error('❌ Error getting guild messages:', err.message);
-        callback([]);
-      } else {
-        callback(rows || []);
-      }
+    db.all('SELECT * FROM messages WHERE guildId = ? ORDER BY timestamp DESC LIMIT 1000', [guildId], (err, rows) => {
+      callback(rows || []);
     });
   },
 
-  getRecentMessages(limit = 50, callback) {
+  getStats(callback) {
     if (!db) {
-      callback([]);
+      callback({});
       return;
     }
-    
-    db.all('SELECT * FROM messages ORDER BY timestamp DESC LIMIT ?', [limit], (err, rows) => {
-      if (err) {
-        console.error('❌ Error getting recent messages:', err.message);
-        callback([]);
-      } else {
-        callback(rows || []);
-      }
+    const stats = {};
+    db.get('SELECT COUNT(*) as total FROM messages', (err, row) => {
+      stats.totalMessages = row ? row.total : 0;
+      db.get('SELECT COUNT(DISTINCT authorId) as total FROM messages', (err, row) => {
+        stats.uniqueUsers = row ? row.total : 0;
+        db.get('SELECT COUNT(DISTINCT guildId) as total FROM messages', (err, row) => {
+          stats.totalGuilds = row ? row.total : 0;
+          callback(stats);
+        });
+      });
     });
   },
 
   closeDatabase() {
     if (db) {
-      db.close((err) => {
-        if (err) {
-          console.error('❌ Error closing database:', err.message);
-        } else {
-          console.log('✅ Database closed');
-          dbInitialized = false;
-        }
-      });
+      db.close();
     }
   }
 };
